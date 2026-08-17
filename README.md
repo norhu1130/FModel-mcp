@@ -28,7 +28,7 @@ claude mcp add --transport http fmodel http://127.0.0.1:44551/mcp
 
 What it exposes:
 - **Resources** — `fmodel://project`, `fmodel://archives`, `fmodel://folder/{path}`, `fmodel://asset/{path}`
-- **Tools** — `get_project_info`, `list_archives`, `list_folder`, `search_files`, `get_asset_json`, `get_asset_metadata`, `get_references`, `decompile_blueprint`, `export_raw`, `save_properties_json`, `save_texture`, `export_model`, `export_animation`, `export_world`, `export_audio`
+- **Tools** — `get_project_info`, `list_archives`, `list_folder`, `search_files`, `get_asset_json`, `get_asset_metadata`, `get_references`, `decompile_blueprint`, `export_raw`, `save_properties_json`, `save_texture`, `export_model`, `export_animation`, `export_world`, `export_audio`, `export_folder` (bulk: raw/properties/textures/models/animations/worlds/audio for a whole folder, recursive, capped by `maxFiles`)
 - **Prompts** — `analyze_asset`, `find_assets`
 
 Exports are written to the same output directories and with the same format settings as the FModel UI. Export tools return `BUSY` while an export is already queued or running in the UI, and world exports may pop the streaming-level filter dialog in the app. Game-specific audio formats not covered by the generic Wwise/FMOD/SoundWave paths are only exportable through the UI (`export_raw` always works).

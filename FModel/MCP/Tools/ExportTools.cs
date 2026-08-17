@@ -43,6 +43,15 @@ public sealed class ExportTools(McpAssetService service)
         [Description("Virtual file path of a umap.")] string path)
         => service.ExportObjectsAsync(path, EBulkType.Worlds);
 
+    [McpServerTool(Name = "export_folder")]
+    [Description("Bulk-export every matching file of a virtual folder (optionally recursive). 'kind' selects what to export; the call fails when more than maxFiles files match, as a safety cap. Object exports (textures/models/animations/worlds) run as a single export session and fail with BUSY while another export is running.")]
+    public Task<McpExportOutcome> ExportFolder(
+        [Description("Virtual folder path, e.g. 'GameName/Content/Characters'. Empty for the root (not recommended with recursive=true).")] string path,
+        [Description("What to export: raw | properties | textures | models | animations | worlds | audio.")] string kind,
+        [Description("Include sub-folders recursively (default true).")] bool recursive = true,
+        [Description("Safety cap on the number of files to process, 1-1000 (default 100). The call fails if more files match.")] int maxFiles = 100)
+        => service.ExportFolderAsync(path, kind, recursive, maxFiles);
+
     [McpServerTool(Name = "export_audio")]
     [Description("Extract and save the audio of a package (Wwise/FMOD banks and events, sound waves) or of a raw audio container file to FModel's Audio output directory. Returns the written file paths.")]
     public McpSavedFiles ExportAudio(

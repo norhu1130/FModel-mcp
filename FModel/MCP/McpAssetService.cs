@@ -24,7 +24,9 @@ using CUE4Parse_Conversion.Sounds;
 using FModel.Extensions;
 using FModel.Settings;
 using FModel.ViewModels;
+using FModel.Views.Resources.Controls;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace FModel.MCP;
 
@@ -57,6 +59,18 @@ public sealed class McpAssetService
         _applicationView = applicationView;
         applicationView.CUE4Parse.Provider.VfsMounted += (_, _) => InvalidateFolderIndex();
         applicationView.CUE4Parse.Provider.VfsUnmounted += (_, _) => InvalidateFolderIndex();
+    }
+
+    /// <summary>logs every MCP operation to both Serilog and the in-app log box, so the user can follow what AI clients read and export</summary>
+    private static void LogOp(string tool, string detail = null)
+    {
+        Log.Information("[MCP] {Tool}{Detail}", tool, string.IsNullOrEmpty(detail) ? string.Empty : $": {detail}");
+        FLogger.Append(ELog.Information, () =>
+        {
+            FLogger.Text("MCP ", Constants.BLUE);
+            FLogger.Text(tool + (string.IsNullOrEmpty(detail) ? string.Empty : " "), Constants.YELLOW, string.IsNullOrEmpty(detail));
+            if (!string.IsNullOrEmpty(detail)) FLogger.Text(detail, Constants.WHITE, true);
+        });
     }
 
     #region readiness / lookup
@@ -94,6 +108,7 @@ public sealed class McpAssetService
 
     public McpProjectInfo GetProjectInfo()
     {
+        LogOp("get_project_info");
         var currentDir = UserSettings.Default.CurrentDir;
         var isLoaded = Provider.Files.Count > 0;
 
@@ -131,6 +146,7 @@ public sealed class McpAssetService
 
     public IReadOnlyList<McpArchiveInfo> ListArchives()
     {
+        LogOp("list_archives");
         var archives = new List<McpArchiveInfo>();
         foreach (var reader in Provider.MountedVfs)
             archives.Add(DescribeArchive(reader, true));
@@ -230,6 +246,7 @@ public sealed class McpAssetService
     {
         var index = GetFolderIndex();
         var key = (path ?? string.Empty).Trim().Replace('\\', '/').Trim('/');
+        LogOp("list_folder", key.Length == 0 ? "<root>" : key);
         if (!index.TryGetValue(key, out var node))
         {
             var lastSegment = key.SubstringAfterLast('/');
@@ -256,6 +273,7 @@ public sealed class McpAssetService
         limit = Math.Clamp(limit, 1, 1000);
         offset = Math.Max(0, offset);
         extension = extension?.TrimStart('.');
+        LogOp("search_files", $"'{query}'{(isRegex ? " (regex)" : string.Empty)}{(extension is null ? string.Empty : $" ext={extension}")}{(offset > 0 ? $" offset={offset}" : string.Empty)}");
 
         Regex regex = null;
         string[] terms = null;
@@ -310,6 +328,7 @@ public sealed class McpAssetService
     public string GetAssetJson(string path, string objectName, int maxChars)
     {
         var entry = GetEntry(path);
+        LogOp("get_asset_json", objectName is null ? entry.Path : $"{entry.Path} ({objectName})");
         maxChars = NormalizeMaxChars(maxChars);
 
         if (!entry.IsUePackage)
@@ -343,6 +362,7 @@ public sealed class McpAssetService
     public string GetAssetMetadata(string path, int maxChars)
     {
         var entry = GetEntry(path);
+        LogOp("get_asset_metadata", entry.Path);
         if (!entry.IsUePackage)
             throw McpErrors.Unsupported($"'{entry.Path}' is not a UE package - metadata is only available for uasset/umap files.");
 
@@ -353,12 +373,14 @@ public sealed class McpAssetService
     public IReadOnlyList<string> GetReferences(string path)
     {
         var entry = GetEntry(path);
+        LogOp("get_references", entry.Path);
         return Provider.ScanForPackageRefs(entry).Select(f => f.Path).ToArray();
     }
 
     public string DecompileBlueprint(string path, int maxChars)
     {
         var entry = GetEntry(path);
+        LogOp("decompile_blueprint", entry.Path);
         if (!entry.IsUePackage)
             throw McpErrors.Unsupported($"'{entry.Path}' is not a UE package.");
 
@@ -421,7 +443,17 @@ public sealed class McpAssetService
     public McpSavedFiles ExportRaw(string path)
     {
         var entry = GetEntry(path);
+        LogOp("export_raw", entry.Path);
 
+        var saved = new List<string>();
+        ExportRawCore(entry, saved);
+
+        LogOp("export_raw done", $"{saved.Count} file{(saved.Count == 1 ? "" : "s")} saved");
+        return new McpSavedFiles(saved);
+    }
+
+    private void ExportRawCore(GameFile entry, List<string> saved)
+    {
         IReadOnlyDictionary<string, byte[]> parts;
         try
         {
@@ -432,7 +464,6 @@ public sealed class McpAssetService
             throw McpErrors.Failed($"could not read '{entry.Path}'", e);
         }
 
-        var saved = new List<string>(parts.Count);
         foreach (var (partPath, bytes) in parts)
         {
             var relative = UserSettings.Default.KeepDirectoryStructure ? partPath.TrimStart('/') : partPath.SubstringAfterLast('/');
@@ -441,24 +472,94 @@ public sealed class McpAssetService
             File.WriteAllBytes(filePath, bytes);
             saved.Add(filePath);
         }
-
-        return new McpSavedFiles(saved);
     }
 
     public McpSavedFiles SavePropertiesJson(string path)
     {
         var entry = GetEntry(path);
+        LogOp("save_properties_json", entry.Path);
         if (!entry.IsUePackage)
             throw McpErrors.Unsupported($"'{entry.Path}' is not a UE package. Use export_raw instead.");
 
-        var json = JsonConvert.SerializeObject(Provider.LoadPackage(entry).GetExports(), Formatting.Indented);
-        var filePath = WriteTextFile(UserSettings.Default.PropertiesDirectory, entry, ".json", json);
+        var filePath = SavePropertiesCore(entry);
+        LogOp("save_properties_json done", filePath);
         return new McpSavedFiles([filePath]);
+    }
+
+    private string SavePropertiesCore(GameFile entry)
+    {
+        var json = JsonConvert.SerializeObject(Provider.LoadPackage(entry).GetExports(), Formatting.Indented);
+        return WriteTextFile(UserSettings.Default.PropertiesDirectory, entry, ".json", json);
+    }
+
+    private static ExportSessionViewModel EnsureSessionAvailable()
+    {
+        var sessionVm = ExportSessionViewModel.Instance;
+        if (sessionVm.IsRunning || sessionVm.Session.TotalQueued > 0)
+            throw McpErrors.Busy("an export is already queued or running in the FModel UI.");
+        return sessionVm;
+    }
+
+    private int QueueMatchingExports(GameFile entry, EBulkType kind, ExportSessionViewModel sessionVm)
+    {
+        var queued = 0;
+        var pkg = Provider.LoadPackage(entry);
+        for (var i = 0; i < pkg.ExportMapLength; i++)
+        {
+            try
+            {
+                var pointer = new FPackageIndex(pkg, i + 1).ResolvedObject;
+                if (pointer?.Object is null) continue;
+
+                var dummy = ((AbstractUePackage) pkg).ConstructObject(pointer.Class, pkg);
+                var match = kind switch
+                {
+                    EBulkType.Textures => dummy is UTexture,
+                    EBulkType.Meshes => dummy is UStaticMesh or USkeletalMesh || (dummy is USkeleton && UserSettings.Default.SaveSkeletonAsMesh),
+                    EBulkType.Animations => dummy is UAnimationAsset,
+                    EBulkType.Worlds => dummy is UWorld,
+                    _ => false
+                };
+                if (!match) continue;
+
+                sessionVm.Session.Add(pointer.Object.Value);
+                queued++;
+            }
+            catch
+            {
+                // skip exports that fail to resolve, same as the UI bulk path
+            }
+        }
+
+        return queued;
+    }
+
+    private static async Task<McpExportOutcome> RunQueuedSessionAsync(ExportSessionViewModel sessionVm, string toolName)
+    {
+        var results = await sessionVm.ExportAsync().ConfigureAwait(false);
+        if (results is null)
+            throw McpErrors.Failed("the export session did not run.");
+
+        var filePaths = results.Where(r => r.Success).SelectMany(r => r.DiskFilePaths ?? []).ToArray();
+        var errors = results.Where(r => !r.Success)
+            .Select(r => $"{r.ObjectPath}: {r.Error?.GetBaseException().Message ?? "unknown error"}")
+            .ToArray();
+        LogOp($"{toolName} done", $"{results.Count(r => r.Success)} succeeded, {errors.Length} failed, {filePaths.Length} file{(filePaths.Length == 1 ? "" : "s")} saved");
+        return new McpExportOutcome(results.Count(r => r.Success), errors.Length, filePaths, errors);
     }
 
     public async Task<McpExportOutcome> ExportObjectsAsync(string path, EBulkType kind)
     {
         var entry = GetEntry(path);
+        var toolName = kind switch
+        {
+            EBulkType.Textures => "save_texture",
+            EBulkType.Meshes => "export_model",
+            EBulkType.Animations => "export_animation",
+            EBulkType.Worlds => "export_world",
+            _ => "export"
+        };
+        LogOp(toolName, entry.Path);
         if (!entry.IsUePackage)
             throw McpErrors.Unsupported($"'{entry.Path}' is not a UE package.");
 
@@ -467,59 +568,12 @@ public sealed class McpAssetService
 
         try
         {
-            var sessionVm = ExportSessionViewModel.Instance;
-            if (sessionVm.IsRunning || sessionVm.Session.TotalQueued > 0)
-                throw McpErrors.Busy("an export is already queued or running in the FModel UI.");
+            var sessionVm = EnsureSessionAvailable();
+            var queued = QueueMatchingExports(entry, kind, sessionVm);
+            if (queued == 0)
+                throw McpErrors.Unsupported($"no exportable {kind} objects found in '{entry.Path}'.");
 
-            var queued = 0;
-            try
-            {
-                var pkg = Provider.LoadPackage(entry);
-                for (var i = 0; i < pkg.ExportMapLength; i++)
-                {
-                    try
-                    {
-                        var pointer = new FPackageIndex(pkg, i + 1).ResolvedObject;
-                        if (pointer?.Object is null) continue;
-
-                        var dummy = ((AbstractUePackage) pkg).ConstructObject(pointer.Class, pkg);
-                        var match = kind switch
-                        {
-                            EBulkType.Textures => dummy is UTexture,
-                            EBulkType.Meshes => dummy is UStaticMesh or USkeletalMesh || (dummy is USkeleton && UserSettings.Default.SaveSkeletonAsMesh),
-                            EBulkType.Animations => dummy is UAnimationAsset,
-                            EBulkType.Worlds => dummy is UWorld,
-                            _ => false
-                        };
-                        if (!match) continue;
-
-                        sessionVm.Session.Add(pointer.Object.Value);
-                        queued++;
-                    }
-                    catch
-                    {
-                        // skip exports that fail to resolve, same as the UI bulk path
-                    }
-                }
-
-                if (queued == 0)
-                    throw McpErrors.Unsupported($"no exportable {kind} objects found in '{entry.Path}'.");
-            }
-            catch
-            {
-                if (queued > 0) sessionVm.Session.Clear();
-                throw;
-            }
-
-            var results = await sessionVm.ExportAsync().ConfigureAwait(false);
-            if (results is null)
-                throw McpErrors.Failed("the export session did not run.");
-
-            var filePaths = results.Where(r => r.Success).SelectMany(r => r.DiskFilePaths ?? []).ToArray();
-            var errors = results.Where(r => !r.Success)
-                .Select(r => $"{r.ObjectPath}: {r.Error?.GetBaseException().Message ?? "unknown error"}")
-                .ToArray();
-            return new McpExportOutcome(results.Count(r => r.Success), errors.Length, filePaths, errors);
+            return await RunQueuedSessionAsync(sessionVm, toolName).ConfigureAwait(false);
         }
         finally
         {
@@ -527,11 +581,165 @@ public sealed class McpAssetService
         }
     }
 
+    public async Task<McpExportOutcome> ExportFolderAsync(string path, string kind, bool recursive, int maxFiles)
+    {
+        var kindKey = (kind ?? string.Empty).Trim().ToLowerInvariant();
+        var bulk = kindKey switch
+        {
+            "textures" or "texture" => EBulkType.Textures,
+            "models" or "model" or "meshes" or "mesh" => EBulkType.Meshes,
+            "animations" or "animation" => EBulkType.Animations,
+            "worlds" or "world" => EBulkType.Worlds,
+            "raw" or "properties" or "audio" => EBulkType.None,
+            _ => throw McpErrors.Failed("kind must be one of: raw, properties, textures, models, animations, worlds, audio")
+        };
+
+        var index = GetFolderIndex();
+        var key = (path ?? string.Empty).Trim().Replace('\\', '/').Trim('/');
+        if (!index.ContainsKey(key))
+        {
+            var lastSegment = key.SubstringAfterLast('/');
+            var suggestions = index.Keys
+                .Where(k => k.Length > 0 && k.SubstringAfterLast('/').Equals(lastSegment, StringComparison.OrdinalIgnoreCase))
+                .Take(3);
+            throw McpErrors.NotFound(key.Length == 0 ? "<root>" : key, suggestions);
+        }
+
+        maxFiles = Math.Clamp(maxFiles <= 0 ? 100 : maxFiles, 1, 1000);
+
+        var targets = new List<GameFile>();
+        foreach (var filePath in CollectFolderFiles(index, key, recursive))
+        {
+            if (!Provider.Files.TryGetValue(filePath, out var file)) continue;
+
+            var isTarget = kindKey switch
+            {
+                "raw" => true,
+                "audio" => file.IsUePackage || AudioFileExtensions.Contains(file.Extension),
+                _ => file.IsUePackage
+            };
+            if (isTarget) targets.Add(file);
+        }
+
+        var folderLabel = key.Length == 0 ? "<root>" : key;
+        if (targets.Count == 0)
+            throw McpErrors.Unsupported($"no files matching kind '{kindKey}' in '{folderLabel}'{(recursive ? "" : " (recursive=false)")}.");
+        if (targets.Count > maxFiles)
+            throw McpErrors.Failed($"{targets.Count} files match in '{folderLabel}', which exceeds maxFiles={maxFiles}. Raise maxFiles (up to 1000), pick a deeper folder, or set recursive=false.");
+
+        LogOp("export_folder", $"{kindKey} '{folderLabel}' ({targets.Count} file{(targets.Count == 1 ? "" : "s")}{(recursive ? ", recursive" : "")})");
+
+        if (!_exportGate.Wait(0))
+            throw McpErrors.Busy("another MCP export is already running.");
+
+        try
+        {
+            switch (kindKey)
+            {
+                case "raw":
+                case "properties":
+                case "audio":
+                {
+                    var saved = new List<string>();
+                    var errors = new List<string>();
+                    var succeeded = 0;
+                    foreach (var file in targets)
+                    {
+                        try
+                        {
+                            switch (kindKey)
+                            {
+                                case "raw":
+                                    ExportRawCore(file, saved);
+                                    break;
+                                case "properties":
+                                    saved.Add(SavePropertiesCore(file));
+                                    break;
+                                default:
+                                    ExportAudioCore(file, saved);
+                                    break;
+                            }
+
+                            succeeded++;
+                        }
+                        catch (Exception e)
+                        {
+                            errors.Add($"{file.Path}: {e.GetBaseException().Message}");
+                        }
+                    }
+
+                    LogOp("export_folder done", $"{succeeded} succeeded, {errors.Count} failed, {saved.Count} file{(saved.Count == 1 ? "" : "s")} saved");
+                    return new McpExportOutcome(succeeded, errors.Count, saved, errors);
+                }
+                default:
+                {
+                    var sessionVm = EnsureSessionAvailable();
+                    var queueErrors = new List<string>();
+                    var queued = 0;
+                    foreach (var file in targets)
+                    {
+                        try
+                        {
+                            queued += QueueMatchingExports(file, bulk, sessionVm);
+                        }
+                        catch (Exception e)
+                        {
+                            queueErrors.Add($"{file.Path}: {e.GetBaseException().Message}");
+                        }
+                    }
+
+                    if (queued == 0)
+                        throw McpErrors.Unsupported($"no exportable {bulk} objects found in '{folderLabel}'.");
+
+                    var outcome = await RunQueuedSessionAsync(sessionVm, "export_folder").ConfigureAwait(false);
+                    return queueErrors.Count == 0
+                        ? outcome
+                        : new McpExportOutcome(outcome.Succeeded, outcome.Failed + queueErrors.Count, outcome.FilePaths, [.. outcome.Errors, .. queueErrors]);
+                }
+            }
+        }
+        finally
+        {
+            _exportGate.Release();
+        }
+    }
+
+    private static List<string> CollectFolderFiles(Dictionary<string, FolderNode> index, string key, bool recursive)
+    {
+        var result = new List<string>();
+        Walk(key);
+        return result;
+
+        void Walk(string folder)
+        {
+            if (!index.TryGetValue(folder, out var node)) return;
+
+            foreach (var file in node.Files)
+                result.Add(folder.Length == 0 ? file.Name : $"{folder}/{file.Name}");
+
+            if (!recursive) return;
+            foreach (var name in node.Folders)
+                Walk(folder.Length == 0 ? name : $"{folder}/{name}");
+        }
+    }
+
     public McpSavedFiles ExportAudio(string path)
     {
         var entry = GetEntry(path);
-        var saved = new List<string>();
+        LogOp("export_audio", entry.Path);
 
+        var saved = new List<string>();
+        ExportAudioCore(entry, saved);
+
+        if (saved.Count == 0)
+            throw McpErrors.Unsupported($"no supported audio exports found in '{entry.Path}'. Game-specific audio formats may only be exportable through the FModel UI; export_raw is always available.");
+
+        LogOp("export_audio done", $"{saved.Count} file{(saved.Count == 1 ? "" : "s")} saved");
+        return new McpSavedFiles(saved);
+    }
+
+    private void ExportAudioCore(GameFile entry, List<string> saved)
+    {
         if (!entry.IsUePackage)
         {
             if (!AudioFileExtensions.Contains(entry.Extension))
@@ -540,7 +748,8 @@ public sealed class McpAssetService
             if (!AudioSaver.TrySave(entry.PathWithoutExtension, entry.Extension, entry.Read(), out var savedPath))
                 throw McpErrors.Failed($"could not save or convert '{entry.Path}'");
 
-            return new McpSavedFiles([savedPath]);
+            saved.Add(savedPath);
+            return;
         }
 
         var cue4Parse = _applicationView.CUE4Parse;
@@ -613,11 +822,6 @@ public sealed class McpAssetService
                 // skip exports that fail to resolve or decode, same as the UI bulk path
             }
         }
-
-        if (saved.Count == 0)
-            throw McpErrors.Unsupported($"no supported audio exports found in '{entry.Path}'. Game-specific audio formats may only be exportable through the FModel UI; export_raw is always available.");
-
-        return new McpSavedFiles(saved);
     }
 
     private static void SaveSound(string fullPath, string ext, byte[] data, List<string> saved)
