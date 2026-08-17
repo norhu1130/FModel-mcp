@@ -1,3 +1,4 @@
+using FModel.MCP;
 using FModel.ViewModels;
 
 namespace FModel.Services
@@ -7,5 +8,6 @@ namespace FModel.Services
         public static ThreadWorkerViewModel ThreadWorkerView { get; } = new();
         public static ApplicationViewModel ApplicationView { get; } = new();
         public static ApiEndpointViewModel ApiEndpointView { get; } = new();
+        public static McpServerService McpServerView { get; } = new();
     }
 }

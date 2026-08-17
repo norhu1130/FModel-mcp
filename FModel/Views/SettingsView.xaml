@@ -46,6 +46,8 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -284,6 +286,17 @@
                              TextAlignment="Right"
                              TextChanged="CriwareKeyBox_TextChanged"
                              Loaded="CriwareKeyBox_Loaded" />
+
+                    <TextBlock Grid.Row="22" Grid.Column="0" Text="MCP Server (requires restart)" VerticalAlignment="Center" Margin="0 0 0 5"
+                               ToolTip="Expose the loaded project to AI clients over the Model Context Protocol (http://127.0.0.1:port/mcp)" />
+                    <CheckBox Grid.Row="22" Grid.Column="2" Content="{Binding IsChecked, RelativeSource={RelativeSource Self}, Converter={x:Static converters:BoolToToggleConverter.Instance}}"
+                              IsChecked="{Binding EnableMcpServer, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay}" Margin="0 5 0 10"
+                              Style="{DynamicResource {x:Static adonisUi:Styles.ToggleSwitch}}" />
+
+                    <TextBlock Grid.Row="23" Grid.Column="0" Text="MCP Server Port (requires restart)" VerticalAlignment="Center" Margin="0 0 0 5" />
+                    <TextBox Grid.Row="23" Grid.Column="2" Grid.ColumnSpan="5" Margin="0 5 0 10"
+                             VerticalAlignment="Center" VerticalContentAlignment="Center" TextAlignment="Right" MaxLength="5"
+                             Text="{Binding McpServerPort, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
             </DataTemplate>
             <DataTemplate x:Key="CreatorTemplate">

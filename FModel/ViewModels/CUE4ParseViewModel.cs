@@ -1651,41 +1651,7 @@ public class CUE4ParseViewModel : ViewModel
         TabControl.SelectedTab.TitleExtra = "Decompiled";
         TabControl.SelectedTab.Highlighter = AvalonExtensions.HighlighterSelector("cpp");
 
-        UClassCookedMetaData cookedMetaData = null;
-        try
-        {
-            var editorPkg = Provider.LoadPackage(entry.Path.Replace(".uasset", ".o.uasset"));
-            cookedMetaData = editorPkg.GetExport<UClassCookedMetaData>("CookedClassMetaData");
-        }
-        catch
-        {
-            // ignored
-        }
-
-        var cppList = new List<string>();
-        var pkg = Provider.LoadPackage(entry);
-        for (var i = 0; i < pkg.ExportMapLength; i++)
-        {
-            var pointer = new FPackageIndex(pkg, i + 1).ResolvedObject;
-            if (pointer?.Object is null && pointer.Class?.Object?.Value is null)
-                continue;
-
-            var dummy = ((AbstractUePackage) pkg).ConstructObject(pointer.Class, pkg);
-            if (dummy is not UClass || pointer.Object.Value is not UClass blueprint)
-                continue;
-
-            cppList.Add(blueprint.DecompileBlueprintToPseudo(cookedMetaData));
-        }
-
-        if (cppList.Count == 0) return false;
-        var cpp = cppList.Count > 1 ? string.Join("\n\n", cppList) : cppList.FirstOrDefault() ?? string.Empty;
-        if (entry.Path.Contains("_Verse.uasset"))
-        {
-            cpp = Regex.Replace(cpp, "__verse_0x[a-fA-F0-9]{8}_", ""); // UnmangleCasedName
-        }
-        cpp = Regex.Replace(cpp, @"CallFunc_([A-Za-z0-9_]+)_ReturnValue", "$1");
-        cpp = Regex.Replace(cpp, @"K2Node_DynamicCast_([A-Za-z0-9_]+)", "$1");
-        cpp = Regex.Replace(cpp, @"K2Node_([A-Za-z0-9_]+)", "$1");
+        if (!BlueprintDecompiler.TryDecompile(Provider, entry, out var cpp)) return false;
 
         TabControl.SelectedTab.SetDocumentText(cpp, false, false);
         return true;
@@ -1693,38 +1659,19 @@ public class CUE4ParseViewModel : ViewModel
 
     private void SaveAndPlaySound(CancellationToken cancellationToken, string fullPath, string ext, byte[] data, bool saveAudio, bool updateUi)
     {
-        if (fullPath.StartsWith('/')) fullPath = fullPath[1..];
-        var extLower = ext.ToLowerInvariant();
-        var baseFilePath = UserSettings.Default.KeepDirectoryStructure ? fullPath : fullPath.SubstringAfterLast('/');
-        var combinedPath = Path.Combine(UserSettings.Default.AudioDirectory, baseFilePath);
-        var savedAudioPath = Path.ChangeExtension(combinedPath, extLower).Replace('\\', '/');
-
         if (saveAudio)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var directory = Path.GetDirectoryName(savedAudioPath);
-            Directory.CreateDirectory(directory);
 
-            bool conversionSuccess = true;
-            if (UserSettings.Default.ConvertAudioOnBulkExport && extLower is not "wav")
+            if (!AudioSaver.TrySave(fullPath, ext, data, out var savedAudioPath))
             {
-                if (AudioPlayerViewModel.TryConvert(savedAudioPath, data, extLower, out string wavFilePath))
-                    savedAudioPath = wavFilePath;
-                else
-                {
-                    Interlocked.Increment(ref FailedExportCount);
-                    return;
-                }
-            }
-            else
-            {
-                using var stream = new FileStream(savedAudioPath, FileMode.Create, FileAccess.Write);
-                stream.Write(data);
+                Interlocked.Increment(ref FailedExportCount);
+                return;
             }
 
             Interlocked.Increment(ref ExportedCount);
             Log.Information("Successfully saved {FilePath}", savedAudioPath);
-            if (updateUi && conversionSuccess)
+            if (updateUi)
             {
                 FLogger.Append(ELog.Information, () =>
                 {
@@ -1743,10 +1690,11 @@ public class CUE4ParseViewModel : ViewModel
         // since we are currently in a thread, the audio player's lifetime (memory-wise) will keep the current thread up and running until fmodel itself closes
         // the solution would be to kill the current thread at this line and then open the audio player without "Application.Current.Dispatcher.Invoke"
         // but the ThreadWorkerViewModel is an idiot and doesn't understand we want to kill the current thread inside the current thread and continue the code
+        var playbackPath = AudioSaver.ResolveOutputPath(fullPath, ext);
         Application.Current.Dispatcher.Invoke(delegate
         {
             var audioPlayer = Helper.GetWindow<AudioPlayer>("Audio Player", () => new AudioPlayer().Show());
-            audioPlayer.Load(data, savedAudioPath);
+            audioPlayer.Load(data, playbackPath);
         });
     }
 

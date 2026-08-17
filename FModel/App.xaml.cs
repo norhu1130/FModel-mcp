@@ -150,6 +150,7 @@ public partial class App
 
     private void AppExit(object sender, ExitEventArgs e)
     {
+        ApplicationService.McpServerView.StopAsync().GetAwaiter().GetResult();
         Log.Information("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––");
         Log.CloseAndFlush();
         UserSettings.Save();

@@ -199,6 +199,20 @@ public sealed class UserSettings : ViewModel
         set => SetProperty(ref _keepDirectoryStructure, value);
     }
 
+    private bool _enableMcpServer = true;
+    public bool EnableMcpServer
+    {
+        get => _enableMcpServer;
+        set => SetProperty(ref _enableMcpServer, value);
+    }
+
+    private int _mcpServerPort = 44551;
+    public int McpServerPort
+    {
+        get => _mcpServerPort;
+        set => SetProperty(ref _mcpServerPort, value);
+    }
+
     private bool _showDecompileOption = false;
     public bool ShowDecompileOption
     {

@@ -113,6 +113,7 @@ public partial class MainWindow
         await _applicationView.CUE4Parse.Initialize();
         await _applicationView.AesManager.InitAes();
         await _applicationView.UpdateProvider(true);
+        await ApplicationService.McpServerView.StartAsync();
 #if !DEBUG
         await _applicationView.CUE4Parse.InitInformation();
 #endif
