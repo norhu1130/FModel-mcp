@@ -1,6 +1,7 @@
 This software includes material developed by the following third-party libraries:
 
 - Adonis UI (https://github.com/benruehl/adonis-ui/blob/master/LICENSE) - Copyright (c) 2018 Benjamin Rühl. Licensed under the MIT License.
+- ASP.NET Core (https://github.com/dotnet/aspnetcore/blob/main/LICENSE.txt) - Copyright (c) .NET Foundation and Contributors. Licensed under the MIT License.
 - AutoUpdater.NET (https://github.com/ravibpatel/AutoUpdater.NET/blob/master/LICENSE) - Copyright (c) 2012-2023 RBSoft. Licensed under the MIT License.
 - AvalonEdit (https://github.com/icsharpcode/AvalonEdit/blob/master/LICENSE) - Copyright (c) AvalonEdit Contributors. Licensed under the MIT License.
 - CSCore (https://github.com/filoe/cscore/blob/master/license.md) - Licensed under the MS-PL License.
@@ -9,6 +10,7 @@ This software includes material developed by the following third-party libraries
 - EpicManifestParser (https://github.com/NotOfficer/EpicManifestParser/blob/master/LICENSE) - Copyright (c) 2020 NotOfficer. Licensed under the MIT License.
 - ImGui.NET (https://github.com/mellinoe/ImGui.NET/blob/master/LICENSE) - Copyright (c) 2017 Eric Mellino and ImGui.NET contributors. Licensed under the MIT License.
 - K4os.Compression.LZ4 (https://github.com/MiloszKrajewski/K4os.Compression.LZ4/blob/master/LICENSE) - Copyright (c) 2017 Milosz Krajewski. Licensed under the MIT License.
+- MCP C# SDK / ModelContextProtocol (https://github.com/modelcontextprotocol/csharp-sdk/blob/main/LICENSE) - Copyright (c) Model Context Protocol contributors. Licensed under the MIT License and the Apache License 2.0 (licensing transition; see the repository LICENSE).
 - Newtonsoft.Json (https://github.com/JamesNK/Newtonsoft.Json/blob/master/LICENSE.md) - Copyright (c) 2007 James Newton-King. Licensed under the MIT License.
 - NVorbis (https://github.com/NVorbis/NVorbis/blob/master/LICENSE) - Copyright (c) 2020 Andrew Ward. Licensed under the MIT License.
 - Oodle.NET (https://github.com/NotOfficer/Oodle.NET/blob/master/LICENSE) - Copyright (c) 2021 Officer. Licensed under the MIT License.
@@ -16,6 +18,7 @@ This software includes material developed by the following third-party libraries
 - OpenTK (https://github.com/opentk/opentk/blob/master/LICENSE.md) - Copyright (c) 2006-2019 Stefanos Apostolopoulos for the Open Toolkit project. Licensed under the MIT License.
 - RestSharp (https://github.com/restsharp/RestSharp/blob/dev/LICENSE.txt) - Copyright (c) .NET Foundation and Contributors. Licensed under the Apache License 2.0.
 - Serilog (https://github.com/serilog/serilog/blob/dev/LICENSE) - Copyright 2013-2015 Serilog Contributors. Licensed under the Apache License 2.0.
+- Serilog.Extensions.Logging (https://github.com/serilog/serilog-extensions-logging/blob/dev/LICENSE) - Copyright Serilog Contributors. Licensed under the Apache License 2.0.
 - SixLabors.ImageSharp (https://github.com/SixLabors/ImageSharp/blob/main/LICENSE) - Copyright (c) Six Labors. Licensed under the Apache License 2.0.
 - SkiaSharp (https://github.com/mono/SkiaSharp/blob/main/LICENSE.md) - Copyright (c) 2015-2016 Xamarin, Inc. & 2017-2018 Microsoft Corporation. Licensed under the MIT License.
 - VirtualizingWrapPanel (https://github.com/sbaeumlisberger/VirtualizingWrapPanel/blob/master/LICENSE) - Copyright (c) 2019 S. Bäumlisberger. Licensed under the MIT License.
